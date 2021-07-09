@@ -60,52 +60,29 @@ ORDER BY
 
 -- Report 2 - On time percentage of each airline for the year 2015
 
--- ALTER TABLE stg_flights MODIFY COLUMN airline varchar(200) NULL;
--- CREATE INDEX stg_flights_airline_idx ON stg_flights (airline);
-
--- ALTER TABLE stg_flights ADD COLUMN isDelayed INT;
--- CREATE INDEX stg_flights_isDelayed_idx ON stg_flights (isDelayed);
-
--- UPDATE stg_flights 
--- SET isDelayed = 
--- 	CASE 
--- 		WHEN arrival_delay != 0 THEN 1 	-- if delay is not 0 (mins) then there was a delay
--- 		ELSE 0 END 
--- ;
-
 WITH 
-flights AS (
-	SELECT	airline
-    , CASE 
-		WHEN arrival_delay != 0 THEN 1 	        -- if delay is not 0 (mins) then there was a delay
-		ELSE 0 END isDelayed
-	FROM 	stg_flights a
-	WHERE 	1=1
-	AND 	YEAR = 2015 						-- asked for year 2015
-	AND 	arrival_delay IS NOT NULL 			-- null means we are missing data
-	AND 	arrival_delay >= 0 					-- negative numbers mean the flight was early
-),
-onTime AS (
-	SELECT		Airline, COUNT(*) OnTime 
-	FROM 		flights 
-	WHERE 		isDelayed = 0 
-	GROUP BY 	airline
-),
-total_flights AS (
-	SELECT		airline, COUNT(*) Total 
-	FROM 		flights 
-	GROUP BY 	airline
+flights_ontime AS (
+  SELECT a.AIRLINE, a.AIRLINE_DELAY
+  FROM stg_flights a 
+  WHERE 1=1
+  AND a.`YEAR` = 2015
+  AND a.AIRLINE_DELAY IS NOT NULL
+  AND a.AIRLINE_DELAY = 0
 )
-SELECT 
-	c.Airline, a.OnTime, b.Total
-	, ROUND((a.onTime/b.total) * 100,2) OnTimePercentage
-FROM 
-	onTime a
-INNER JOIN
-	total_flights b USING(airline)
-INNER JOIN
-  stg_airlines c ON a.airline = c.iata_code
-ORDER BY 1
+, flights_total AS (
+  SELECT a.AIRLINE, a.AIRLINE_DELAY
+  FROM stg_flights a 
+  WHERE 1=1
+  AND a.`YEAR` = 2015
+  AND a.AIRLINE_DELAY IS NOT NULL
+)
+, airline_ontime_final AS ( SELECT AIRLINE, COUNT(*) ONTIME FROM flights_ontime GROUP BY AIRLINE )
+, airline_total_final AS ( SELECT AIRLINE, COUNT(*) TOTAL FROM flights_total  GROUP BY AIRLINE )
+SELECT a.AIRLINE, a.ONTIME, b.TOTAL,  ROUND(a.ONTIME/b.TOTAL*100,2) OnTimePercentage
+FROM airline_ontime_final a
+INNER JOIN airline_total_final b USING(airline)
+ORDER BY 1 
+;
 
 -- COMMAND ----------
 
@@ -152,22 +129,12 @@ ORDER BY 1
 -- COMMAND ----------
 
 -- Report 6 - Airline with the most unique routes
-WITH airport_routes AS (
-	SELECT 	a.AIRLINE, CONCAT(a.ORIGIN_AIRPORT, '-',a.DESTINATION_AIRPORT) ROUTE
-	FROM 	stg_flights a
-),
-route_by_airport AS (
-	SELECT 	AIRLINE, ROUTE 
-	FROM 	airport_routes 
-	GROUP BY AIRLINE, ROUTE
+WITH 
+airlines_and_routes AS (
+  SELECT 	b.AIRLINE, CONCAT(a.ORIGIN_AIRPORT, '-',a.DESTINATION_AIRPORT) ROUTE
+  FROM 	stg_flights a
+  INNER JOIN stg_airlines b ON a.airline = b.iata_code
+  GROUP BY b.airline, route
 )
-SELECT 	
-  b.Airline, COUNT(*) uniqueRoutes
-FROM 	
-  route_by_airport a
-INNER JOIN
-  stg_airlines b ON a.airline = b.iata_code
-GROUP BY 
-  b.airline
-ORDER BY 2 DESC
-LIMIT 1
+SELECT airline, COUNT(*) uniqueRoutes FROM airlines_and_routes GROUP BY airline ORDER BY 2 DESC LIMIT 1
+;
