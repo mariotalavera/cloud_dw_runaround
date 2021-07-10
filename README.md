@@ -34,3 +34,6 @@
 - A preliminary dashboard was done in Snowflake.
 
 ![Snowflake Dashboard](snowflake_dashboard.png)
+
+![DataFlow](data_flow.png)
+
